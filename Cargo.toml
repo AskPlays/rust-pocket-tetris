@@ -1,7 +1,10 @@
+cargo-features = ["strip"]
+
 [package]
 name = "rust-pocket-tetris"
 version = "0.1.0"
 edition = "2018"
+
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -14,4 +17,11 @@ rand = "0.8"
 opt-level = 2
 
 [profile.release]
-opt-level = 3
+opt-level = "z"
+strip = true
+lto = true
+codegen-units = 1
+panic = "abort"
+
+# cargo +nightly build -Z build-std=std,panic_abort --target x86_64-pc-windows-msvc --release
+# cargo +nightly build -Z build-std=std,panic_abort -Z build-std-features=panic_immediate_abort --target x86_64-pc-windows-msvc --release

@@ -1,0 +1,1 @@
+upx --best --lzma target/release/rust-pocket-tetris.exe
