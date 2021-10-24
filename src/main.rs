@@ -2,7 +2,7 @@
 //#![windows_subsystem = "windows"]
 extern crate minifb;
 
-use minifb::{Key, Window, WindowOptions, KeyRepeat};
+use minifb::{Key, Window, WindowOptions, KeyRepeat, Menu};
 use rand::Rng;
 
 const WIDTH: usize = 640;
@@ -44,6 +44,7 @@ struct Block {
 
 struct Score {
     score: i32,
+    lines: i32,
     name: String,
 }
 
@@ -184,15 +185,37 @@ fn main() {
     let mut keys = [0; 3];
     let mut level = 1;
     let mut lines_cleared = 0;
+    let mut score = 0;
     let mut soft_drop = 0;
     let mut soft_drop_rate = 20f64;
     let mut lock_delay = 0;
     let mut manipulations = 0;
     let das = 100;
     let mut arr = 10;
+    let mut paused:bool = false;
+    let mut binding = 9;
+    let mut key_binds = [Key::Left, Key::Right, Key::Down, Key::Space, Key::A, Key::D, Key::W, Key::LeftShift, Key::R];
+
+    if std::path::Path::new("settings.dat").exists() {
+        match std::fs::read("settings.dat") {
+            Ok(bytes) => { 
+                for i in 0..9 {
+                    key_binds[i] = from_u8(bytes[i]).unwrap();
+                }
+            }
+            Err(e) => {
+                if e.kind() == std::io::ErrorKind::PermissionDenied {
+                    eprintln!("please run again with appropriate permissions.");
+                    return;
+                }
+                panic!("{}", e);
+            }
+        }
+    }
+    
 
     let mut window = Window::new(
-        "My First Rust Program",
+        "Rust Pocket Tetris",
         WIDTH,
         HEIGHT,
         WindowOptions::default(),
@@ -200,6 +223,23 @@ fn main() {
     .unwrap_or_else(|e| {
         panic!("{}", e);
     });
+
+    // menu pretty useless
+    let mut menu = Menu::new("Menu").unwrap();
+    menu.add_item("pause", 9).shortcut(Key::P, 0).build();
+    menu.add_item("restart", 10).shortcut(key_binds[8], 0).build();
+    window.add_menu(&menu);
+    let mut controls_menu = Menu::new("Key Binds").unwrap();
+    controls_menu.add_item("left", 0).shortcut(Key::Key0, 0).build();
+    controls_menu.add_item("right", 1).shortcut(Key::Key1, 0).build();
+    controls_menu.add_item("soft drop", 2).shortcut(Key::Key2, 0).build();
+    controls_menu.add_item("hard drop", 3).shortcut(Key::Key3, 0).build();
+    controls_menu.add_item("Counter Clockwise", 4).shortcut(Key::Key4, 0).build();
+    controls_menu.add_item("Clockwise", 5).shortcut(Key::Key5, 0).build();
+    controls_menu.add_item("180", 6).shortcut(Key::Key6, 0).build();
+    controls_menu.add_item("hold", 7).shortcut(Key::Key7, 0).build();
+    controls_menu.add_item("restart", 8).shortcut(Key::Key8, 0).build();
+    window.add_menu(&controls_menu);
 
     // Limit to max ~60 fps update rate
     window.limit_update_rate(Some(std::time::Duration::from_micros(16600)));
@@ -211,8 +251,42 @@ fn main() {
         let delta = now.elapsed().as_millis();
         now = std::time::Instant::now();
 
+        let pressed = window.is_menu_pressed();
+        if pressed != None { 
+            //println!("menu {:?}", pressed);
+            let item = pressed.unwrap();
+            if item < 9 {
+                println!("binding key");
+                binding = item;
+            }
+        }
+        if pressed == Some(9) {
+            if paused {
+                println!("unpaused");
+                paused = false;
+            } else {
+                println!("paused");
+                paused = true;
+            } 
+        }
+
+        if binding < 9 {
+            window.get_keys_pressed(KeyRepeat::No).map(|keys| {
+                for t in keys {
+                    println!("bound to {:?}", t);
+                    key_binds[binding] = t;
+                    binding = 9;
+                    let mut file_contents:Vec<u8> = Vec::new();
+                    for i in 0..9 {
+                        file_contents.push(key_binds[i] as u8);
+                    }
+                    std::fs::write("settings.dat", file_contents).unwrap();
+                }
+            });
+        }
+
         //controls
-        if window.is_key_pressed(Key::R, KeyRepeat::No) {
+        if window.is_key_pressed(key_binds[8], KeyRepeat::No) || pressed == Some(10) {
             board = vec![0; 10 * 40];
             queue = vec![0; 5];
             bag = vec![0; 7];
@@ -233,6 +307,7 @@ fn main() {
             manipulations = 0;
             held = false;
             lines_cleared = 0;
+            paused = false;
         }
 
         if window.is_key_pressed(Key::Q, KeyRepeat::No) {
@@ -240,7 +315,7 @@ fn main() {
             arr = 0;
         }
 
-        if gameover == false {
+        if gameover == false && paused == false {
             let gravity = (0.8 - (level as f64 - 1f64) * 0.007).powf((level - 1) as f64);
             if keys[0] > 0 {
                 while keys[0] > (gravity*1000f64/soft_drop_rate) as u128 && !piece.collide(0, -1, &board) {
@@ -274,7 +349,7 @@ fn main() {
                 keys[2] += delta;
             }
 
-            if window.is_key_pressed(Key::Down, KeyRepeat::No) && manipulations < 15 {
+            if window.is_key_pressed(key_binds[2], KeyRepeat::No) && manipulations < 15 {
                 if piece.y>-1 && !piece.collide(0, -1, &board) {
                     piece.y-=1;
                     soft_drop = 0;
@@ -288,7 +363,7 @@ fn main() {
                 }
                 keys[0] = 1;
             }
-            if window.is_key_pressed(Key::Left, KeyRepeat::No) && manipulations < 15 {
+            if window.is_key_pressed(key_binds[0], KeyRepeat::No) && manipulations < 15 {
                 if piece.x>-1 && !piece.collide(-1, 0, &board) {
                     piece.x-=1;
                     if lock_delay != 0 { manipulations+=1; }
@@ -297,7 +372,7 @@ fn main() {
                 keys[1] = 1;
             }
     
-            if window.is_key_pressed(Key::Right, KeyRepeat::No) && manipulations < 15 {
+            if window.is_key_pressed(key_binds[1], KeyRepeat::No) && manipulations < 15 {
                 if piece.x<11 && !piece.collide(1, 0, &board) {
                     piece.x+=1;
                     if lock_delay != 0 { manipulations+=1; }
@@ -306,7 +381,7 @@ fn main() {
                 keys[2] = 1;
             }
     
-            if (window.is_key_pressed(Key::Up, KeyRepeat::No) || window.is_key_pressed(Key::D, KeyRepeat::No) || window.is_key_pressed(Key::C, KeyRepeat::No)) && manipulations < 15  {
+            if (window.is_key_pressed(key_binds[5], KeyRepeat::No)) && manipulations < 15  {
                 let prev_r = piece.r.clone();
                 piece.r = (piece.r+1)%4;
                 if piece.collideSRS(prev_r, &board) {piece.r = (piece.r+3)%4}
@@ -314,7 +389,7 @@ fn main() {
                 lock_delay = 0; }
             }
     
-            if (window.is_key_pressed(Key::A, KeyRepeat::No) || window.is_key_pressed(Key::Z, KeyRepeat::No)) && manipulations < 15 {
+            if (window.is_key_pressed(key_binds[4], KeyRepeat::No)) && manipulations < 15 {
                 let prev_r = piece.r.clone();
                 piece.r = (piece.r+3)%4;
                 if piece.collideSRS(prev_r, &board) {piece.r = (piece.r+1)%4}
@@ -322,7 +397,7 @@ fn main() {
                 lock_delay = 0; }
             }
 
-            if (window.is_key_pressed(Key::W, KeyRepeat::No) || window.is_key_pressed(Key::X, KeyRepeat::No)) && manipulations < 15 {
+            if (window.is_key_pressed(key_binds[6], KeyRepeat::No)) && manipulations < 15 {
                 let prev_r = piece.r.clone();
                 piece.r = (piece.r+2)%4;
                 if piece.collideSRS(prev_r, &board) {piece.r = (piece.r+2)%4}
@@ -330,7 +405,7 @@ fn main() {
                 lock_delay = 0; }
             }
 
-            if window.is_key_pressed(Key::LeftShift, KeyRepeat::No) && !held {
+            if window.is_key_pressed(key_binds[7], KeyRepeat::No) && !held {
                 if hold == 0 {
                     let piece_color:u32 = piece.color.clone();
                     hold = piece_color;
@@ -356,7 +431,7 @@ fn main() {
                 held = true;
             }
     
-            if window.is_key_pressed(Key::Space, KeyRepeat::No) {
+            if window.is_key_pressed(key_binds[3], KeyRepeat::No) {
                 while piece.y>-1 && !piece.collide(0, -1, &board) {
                     piece.y-=1;
                 }
@@ -364,13 +439,18 @@ fn main() {
                 piece = Piece::new(4, 19, queue[0]);
                 queue.remove(0);
                 queue.insert(4, get_piece(&mut bag));*/
+                let prevX = piece.x;
+                let prevY = piece.y;
+                let prevRot = piece.r;
+                let prevCol = piece.color;
                 place_piece(&mut board, &mut piece, &mut queue, &mut bag);
                 if piece.collide(0,0, &board) {
                     gameover = true;
                 }
-                let s:Score = placed_piece(&mut board);
-                if s.score > 0 { println!("Score: {}, move: {}", s.score, s.name); }
-                lines_cleared += s.score;
+                let s:Score = placed_piece(&mut board, level, prevX, prevY, prevRot, prevCol);
+                if s.lines > 0 { println!("Score: {}, move: {}", s.score, s.name); }
+                lines_cleared += s.lines;
+                score += s.score;
                 if lines_cleared >= 10 {
                     lines_cleared -= 10;
                     level += 1;
@@ -389,13 +469,18 @@ fn main() {
                 }
             } else {
                 if lock_delay > 500 {
+                    let prevX = piece.x;
+                    let prevY = piece.y;
+                    let prevRot = piece.r;
+                    let prevCol = piece.color;
                     place_piece(&mut board, &mut piece, &mut queue, &mut bag);
                     if piece.collide(0,0, &board) {
                         gameover = true;
                     }
-                    let s:Score = placed_piece(&mut board);
+                    let s:Score = placed_piece(&mut board, level, prevX, prevY, prevRot, prevCol);
                     if s.score > 0 { println!("Score: {}, move: {}", s.score, s.name); }
-                    lines_cleared += s.score;
+                    lines_cleared += s.lines;
+                    score += s.score;
                     if lines_cleared >= 10 {
                         lines_cleared -= 10;
                         level += 1;
@@ -413,15 +498,20 @@ fn main() {
                 lock_delay += delta;
                 soft_drop = 0;
             }
+            if gameover {
+                println!("GAMEOVER");
+                println!("Final Score: {}", score);
+                println!("Lines Cleared: {}", lines_cleared+(level-1)*10);
+            }
         }
 
-        if window.is_key_released(Key::Down) {
+        if window.is_key_released(key_binds[2]) {
             keys[0] = 0;
         }
-        if window.is_key_released(Key::Left) {
+        if window.is_key_released(key_binds[0]) {
             keys[1] = 0;
         }
-        if window.is_key_released(Key::Right) {
+        if window.is_key_released(key_binds[1]) {
             keys[2] = 0;
         }
 
@@ -570,7 +660,24 @@ fn place_piece(brd: &mut Vec<u32>, piece: &mut Piece, queue: &mut Vec<u32>, bag:
     queue.insert(4, get_piece(bag));
 }
 
-fn placed_piece(brd: &mut Vec<u32>) -> Score {
+fn placed_piece(brd: &mut Vec<u32>, level: i32, prevX: i32, prevY: i32, prevRot: u32, prevCol: u32) -> Score {
+    let mut corners:i32 = 0;
+    if prevCol == 7 {
+        if prevX > 0 && prevY > 0 { if brd[(prevX-1+(prevY-1)*(10i32)) as usize] != 0 {corners+=1}}
+        else if prevX-1<0 || prevY-1<0 {corners+=1};
+        if prevX < 9 && prevY > 0 {if brd[(prevX+1+(prevY-1)*(10i32)) as usize] != 0 {corners+=1}}
+        else if prevX+1>9 || prevY-1<0 {corners+=1};
+        if prevX > 0 {if brd[(prevX-1+(prevY+1)*(10i32)) as usize] != 0 {corners+=1}}
+        else if prevX-1<0 {corners+=1};
+        if prevX < 9 {if brd[(prevX+1+(prevY+1)*(10i32)) as usize] != 0 {corners+=1}}
+        else if prevX+1>9 {corners+=1};
+        if prevRot == 1 && corners == 3 && brd[(prevX-1+(prevY+1)*(10i32)) as usize] == 0 {
+            corners-=1;
+        }
+        if prevRot == 3 && corners == 3 && brd[(prevX+1+(prevY+1)*(10i32)) as usize] == 0 {
+            corners-=1;
+        }
+    }
     let mut line_clears = 0;
     let mut y: i32 = 0;
     while y < 20 {
@@ -584,7 +691,7 @@ fn placed_piece(brd: &mut Vec<u32>) -> Score {
             for k in y..20 {
                 for x in 0..10 {
                     if k != 19 {
-                        brd[(x+k*(10 as i32)) as usize] = brd[(x+(k+1)*(10 as i32)) as usize];
+                        brd[(x+k*(10 as i32)) as usize] = brd[(x+(k+1)*(10i32)) as usize];
                     } else {
                         brd[(x+k*(10 as i32)) as usize] = 0;
                     }
@@ -595,13 +702,22 @@ fn placed_piece(brd: &mut Vec<u32>) -> Score {
         }
         y += 1;
     }
+    let mut score:i32 = 0;
     let mut name = String::new();
-    if line_clears == 1 {name += "single"}
-    if line_clears == 2 {name += "double"}
-    if line_clears == 3 {name += "triple"}
-    if line_clears == 4 {name += "quad"}
+    if corners >= 3 {
+        if line_clears == 1 {name += "T-spin single"; score = 800*level}
+        if line_clears == 2 {name += "T-spin double"; score = 1200*level}
+        if line_clears == 3 {name += "T-spin triple"; score = 1600*level}
+    } else { 
+        if line_clears == 1 {name += "single"; score = 100*level}
+        if line_clears == 2 {name += "double"; score = 300*level}
+        if line_clears == 3 {name += "triple"; score = 500*level}
+        if line_clears == 4 {name += "quad"; score = 800*level}
+    }    
+
     return Score{
-        score: line_clears,
+        score: score,
+        lines: line_clears,
         name: name
     }
 }
@@ -623,59 +739,10 @@ fn placed_piece(brd: &mut Vec<u32>) -> Score {
     return 0;
 }*/
 
-/*
-let mut dir: i32 = 1;
-    let mut z: i32 = 0;
-    while window.is_open() && !window.is_key_down(Key::Escape) {
-        let mut x: u32 = 0;
-        let mut y: u32 = 0;
-        for i in buffer.iter_mut() {
-            let mut col: u32 = ((((x as f32) / ((WIDTH as f32)/256.0)) as u32) << 16)+((z as u32) << 8)+(((y as f32) / ((HEIGHT as f32)/256.0)) as u32);
-            *i = col; // write something more funny here!
-            x+=1;
-            if (x as usize) >= WIDTH {
-                x = 0;
-                y += 1;
-            }
-        }
-        z += dir;
-        if z == 255 {
-            dir = -1;
-        } else if z == 0 {
-            dir = 1;
-        }
-
-*//*use coffee::graphics::{Color, Frame, Window, WindowSettings};
-use coffee::load::Task;
-use coffee::{Game, Result, Timer};
-
-fn main() -> Result<()> {
-    MyGame::run(WindowSettings {
-        title: String::from("A caffeinated game"),
-        size: (1280, 1024),
-        resizable: true,
-        fullscreen: false,
-        maximized: false,
-    })
-}
-
-struct MyGame {
-    // Your game state and assets go here...
-}
-
-impl Game for MyGame {
-    type Input = (); // No input data
-    type LoadingScreen = (); // No loading screen
-
-    fn load(_window: &Window) -> Task<MyGame> {
-        // Load your game assets here. Check out the `load` module!
-        Task::succeed(|| MyGame { /* ... */ })
+fn from_u8(n: u8) -> Option<Key> {
+    if n <= 107 {
+        Some(unsafe { core::mem::transmute(n) })
+    } else {
+        None
     }
-
-    fn draw(&mut self, frame: &mut Frame, _timer: &Timer) {
-        // Clear the current frame
-        frame.clear(Color::BLACK);
-
-        // Draw your game here. Check out the `graphics` module!
-    }
-}*/
+}
