@@ -193,13 +193,14 @@ fn main() {
     let das = 100;
     let mut arr = 10;
     let mut paused:bool = false;
-    let mut binding = 9;
-    let mut key_binds = [Key::Left, Key::Right, Key::Down, Key::Space, Key::A, Key::D, Key::W, Key::LeftShift, Key::R];
+    let mut key_binds = [Key::Left, Key::Right, Key::Down, Key::Space, Key::A, Key::D, Key::W, Key::LeftShift, Key::R, Key::P];
+    let binds = key_binds.len();
+    let mut binding = binds;
 
     if std::path::Path::new("settings.dat").exists() {
         match std::fs::read("settings.dat") {
             Ok(bytes) => { 
-                for i in 0..9 {
+                for i in 0..bytes.len() {
                     key_binds[i] = from_u8(bytes[i]).unwrap();
                 }
             }
@@ -226,8 +227,8 @@ fn main() {
 
     // menu pretty useless
     let mut menu = Menu::new("Menu").unwrap();
-    menu.add_item("pause", 9).shortcut(Key::P, 0).build();
-    menu.add_item("restart", 10).shortcut(key_binds[8], 0).build();
+    menu.add_item("pause", binds).shortcut(Key::Unknown, 0).build();
+    menu.add_item("restart", binds+1).shortcut(Key::Unknown, 0).build();
     window.add_menu(&menu);
     let mut controls_menu = Menu::new("Key Binds").unwrap();
     controls_menu.add_item("left", 0).shortcut(Key::Key0, 0).build();
@@ -239,6 +240,7 @@ fn main() {
     controls_menu.add_item("180", 6).shortcut(Key::Key6, 0).build();
     controls_menu.add_item("hold", 7).shortcut(Key::Key7, 0).build();
     controls_menu.add_item("restart", 8).shortcut(Key::Key8, 0).build();
+    controls_menu.add_item("pause", 9).shortcut(Key::Key9, 0).build();
     window.add_menu(&controls_menu);
 
     // Limit to max ~60 fps update rate
@@ -255,12 +257,12 @@ fn main() {
         if pressed != None { 
             //println!("menu {:?}", pressed);
             let item = pressed.unwrap();
-            if item < 9 {
+            if item < binds {
                 println!("binding key");
                 binding = item;
             }
         }
-        if pressed == Some(9) {
+        if window.is_key_pressed(key_binds[9], KeyRepeat::No)  || pressed == Some(binds)  {
             if paused {
                 println!("unpaused");
                 paused = false;
@@ -270,14 +272,14 @@ fn main() {
             } 
         }
 
-        if binding < 9 {
+        if binding < binds {
             window.get_keys_pressed(KeyRepeat::No).map(|keys| {
                 for t in keys {
                     println!("bound to {:?}", t);
                     key_binds[binding] = t;
-                    binding = 9;
+                    binding = binds;
                     let mut file_contents:Vec<u8> = Vec::new();
-                    for i in 0..9 {
+                    for i in 0..binds {
                         file_contents.push(key_binds[i] as u8);
                     }
                     std::fs::write("settings.dat", file_contents).unwrap();
@@ -286,7 +288,7 @@ fn main() {
         }
 
         //controls
-        if window.is_key_pressed(key_binds[8], KeyRepeat::No) || pressed == Some(10) {
+        if window.is_key_pressed(key_binds[8], KeyRepeat::No) || pressed == Some(binds+1) {
             board = vec![0; 10 * 40];
             queue = vec![0; 5];
             bag = vec![0; 7];
