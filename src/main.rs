@@ -2,7 +2,7 @@
 //#![windows_subsystem = "windows"]
 extern crate minifb;
 
-use minifb::{Key, Window, WindowOptions, KeyRepeat, Menu};
+use minifb::{Key, Window, WindowOptions, KeyRepeat, Menu, MouseButton};
 use rand::Rng;
 
 const WIDTH: usize = 640;
@@ -196,6 +196,9 @@ fn main() {
     let mut key_binds = [Key::Left, Key::Right, Key::Down, Key::Space, Key::A, Key::D, Key::W, Key::LeftShift, Key::R, Key::P];
     let binds = key_binds.len();
     let mut binding = binds;
+    let mut piece_delay = 0;
+    let mut line_clear_delay = 0i32;
+    let mut main_menu = true;
 
     if std::path::Path::new("settings.dat").exists() {
         match std::fs::read("settings.dat") {
@@ -269,7 +272,7 @@ fn main() {
             } else {
                 println!("paused");
                 paused = true;
-            } 
+            }
         }
 
         if binding < binds {
@@ -288,7 +291,7 @@ fn main() {
         }
 
         //controls
-        if window.is_key_pressed(key_binds[8], KeyRepeat::No) || pressed == Some(binds+1) {
+        if window.is_key_pressed(key_binds[8], KeyRepeat::No) || pressed == Some(binds+1) || ( main_menu == true && (window.is_key_pressed(Key::Enter, KeyRepeat::No) || window.get_mouse_down(MouseButton::Left))) {
             board = vec![0; 10 * 40];
             queue = vec![0; 5];
             bag = vec![0; 7];
@@ -310,14 +313,16 @@ fn main() {
             held = false;
             lines_cleared = 0;
             paused = false;
+            main_menu = false;
         }
 
         if window.is_key_pressed(Key::Q, KeyRepeat::No) {
             soft_drop_rate = 0f64;
             arr = 0;
+            line_clear_delay = 0i32;
         }
 
-        if gameover == false && paused == false {
+        if gameover == false && paused == false && piece_delay <= 0 {
             let gravity = (0.8 - (level as f64 - 1f64) * 0.007).powf((level - 1) as f64);
             if keys[0] > 0 {
                 while keys[0] > (gravity*1000f64/soft_drop_rate) as u128 && !piece.collide(0, -1, &board) {
@@ -411,7 +416,6 @@ fn main() {
                 if hold == 0 {
                     let piece_color:u32 = piece.color.clone();
                     hold = piece_color;
-                    // piece = Piece::new(4, 19, get_piece(&mut bag));
                     piece = Piece::new(4, 19, queue[0]);
                     if piece.color == 3 || piece.color == 5 {
                         piece.x = 5;
@@ -421,7 +425,6 @@ fn main() {
                 } else {
                     let hold_color:u32 = hold.clone();
                     hold = piece.color.clone();
-                    // piece = Piece::new(4, 19, get_piece(&mut bag));
                     piece = Piece::new(4, 19, hold_color);
                     if piece.color == 3 || piece.color == 5 {
                         piece.x = 5;
@@ -429,6 +432,7 @@ fn main() {
                 }
                 if piece.collide(0,0, &board) {
                     gameover = true;
+                    main_menu = true;
                 }
                 held = true;
             }
@@ -448,9 +452,10 @@ fn main() {
                 place_piece(&mut board, &mut piece, &mut queue, &mut bag);
                 if piece.collide(0,0, &board) {
                     gameover = true;
+                    main_menu = true;
                 }
                 let s:Score = placed_piece(&mut board, level, prevX, prevY, prevRot, prevCol);
-                if s.lines > 0 { println!("Score: {}, move: {}", s.score, s.name); }
+                if s.lines > 0 { println!("Score: {}, move: {}", s.score, s.name); piece_delay = line_clear_delay; }
                 lines_cleared += s.lines;
                 score += s.score;
                 if lines_cleared >= 10 {
@@ -478,9 +483,10 @@ fn main() {
                     place_piece(&mut board, &mut piece, &mut queue, &mut bag);
                     if piece.collide(0,0, &board) {
                         gameover = true;
+                        main_menu = true;
                     }
                     let s:Score = placed_piece(&mut board, level, prevX, prevY, prevRot, prevCol);
-                    if s.score > 0 { println!("Score: {}, move: {}", s.score, s.name); }
+                    if s.score > 0 { println!("Score: {}, move: {}", s.score, s.name);  piece_delay = line_clear_delay; }
                     lines_cleared += s.lines;
                     score += s.score;
                     if lines_cleared >= 10 {
@@ -506,6 +512,9 @@ fn main() {
                 println!("Lines Cleared: {}", lines_cleared+(level-1)*10);
             }
         }
+        if piece_delay > 0 {
+            piece_delay -= delta as i32;
+        }
 
         if window.is_key_released(key_binds[2]) {
             keys[0] = 0;
@@ -525,55 +534,57 @@ fn main() {
         for i in buffer.iter_mut() {
             let mut col: u32 = 0;//((((x as f32) / ((WIDTH as f32)/256.0)) as u32) << 16)+(((y as f32) / ((HEIGHT as f32)/256.0)) as u32);
 
-            if (y >= 10 && ((x >= 140 && x < 170) || (x >= 470 && x < 500))) || (x >= 140 && x < 500 && y >= 610) {
-                col = 0xffffff;
-            }
-
-            if x >= 170 && x < 470 && y < 610 {
-                if (x+11)%30 < 2 || (y+21)%30 < 2 {
-                    col = 0xbfbfbf;
+            if main_menu == false {
+                if (y >= 10 && ((x >= 140 && x < 170) || (x >= 470 && x < 500))) || (x >= 140 && x < 500 && y >= 610) {
+                    col = 0xffffff;
                 }
-                let b_x: i32 = ((x as i32)-170)/30;
-                let b_y: i32 = (599-((y as i32)-10))/30;
-                let index: usize = (b_x+b_y*10) as usize;
-                if board[index] != 0 { col = COLORS[board[index] as usize]; }
-            }
-
-            if x >= 20 && x < 140 && y >= 40 && y < 160 {
-                let b_x: i32 = ((x as i32)-20)/30;
-                let b_y: i32 = (599-((y as i32)-40))/30;
-
-                let mut p_x = 1;
-                if hold == 3 || hold == 5 {
-                    p_x = 2;
-                }
-                let hold_piece: Piece = Piece::new(p_x, 18, hold);
-                for b in hold_piece.getBlocks().iter() {
-                    // println!("{}, {}", b.x, b.y);
-                    if b.x == b_x && b.y == b_y {
-                        col = COLORS[hold as usize];
-                        //println!("colored! {} at {}, {}", col, x, y);
-                        break;
+    
+                if x >= 170 && x < 470 && y < 610 {
+                    if (x+11)%30 < 2 || (y+21)%30 < 2 {
+                        col = 0xbfbfbf;
                     }
+                    let b_x: i32 = ((x as i32)-170)/30;
+                    let b_y: i32 = (599-((y as i32)-10))/30;
+                    let index: usize = (b_x+b_y*10) as usize;
+                    if board[index] != 0 { col = COLORS[board[index] as usize]; }
                 }
-            }
-
-            if x >= 500 && y >= 40 && y < 610 {
-                let q_x: i32 = ((x as i32)-500)/30;
-                let q_y: i32 = (599-((y as i32)-40))/30;
-                // println!("{}, {}", q_x, q_y);
-                'outer: for j in 0..5 {
+    
+                if x >= 20 && x < 140 && y >= 40 && y < 160 {
+                    let b_x: i32 = ((x as i32)-20)/30;
+                    let b_y: i32 = (599-((y as i32)-40))/30;
+    
                     let mut p_x = 1;
-                    if queue[j as usize] == 3 || queue[j as usize] == 5 {
+                    if hold == 3 || hold == 5 {
                         p_x = 2;
                     }
-                    let p: Piece = Piece::new(p_x, 18-j*3, queue[j as usize]);
-                    for b in p.getBlocks().iter() {
+                    let hold_piece: Piece = Piece::new(p_x, 18, hold);
+                    for b in hold_piece.getBlocks().iter() {
                         // println!("{}, {}", b.x, b.y);
-                        if b.x == q_x && b.y == q_y {
-                            col = COLORS[queue[j as usize] as usize];
+                        if b.x == b_x && b.y == b_y {
+                            col = COLORS[hold as usize];
                             //println!("colored! {} at {}, {}", col, x, y);
-                            break 'outer;
+                            break;
+                        }
+                    }
+                }
+    
+                if x >= 500 && y >= 40 && y < 610 {
+                    let q_x: i32 = ((x as i32)-500)/30;
+                    let q_y: i32 = (599-((y as i32)-40))/30;
+                    // println!("{}, {}", q_x, q_y);
+                    'outer: for j in 0..5 {
+                        let mut p_x = 1;
+                        if queue[j as usize] == 3 || queue[j as usize] == 5 {
+                            p_x = 2;
+                        }
+                        let p: Piece = Piece::new(p_x, 18-j*3, queue[j as usize]);
+                        for b in p.getBlocks().iter() {
+                            // println!("{}, {}", b.x, b.y);
+                            if b.x == q_x && b.y == q_y {
+                                col = COLORS[queue[j as usize] as usize];
+                                //println!("colored! {} at {}, {}", col, x, y);
+                                break 'outer;
+                            }
                         }
                     }
                 }
@@ -589,32 +600,80 @@ fn main() {
             }
         }
 
-        //hold rendering
-        let mut p: Piece = Piece::new(piece.x, piece.y, piece.color);
-        p.r = piece.r;
-        while p.y>-1 && !p.collide(0, -1, &board) {
-            p.y-=1;
-        }
-        for b in p.getBlocks().iter() {
-            if b.x >= 0 && b.x < 10 && b.y >= 0 && b.y < 40 {
-                for x in ((b.x as i32)*30+170)..((b.x as i32)*30+200) {
-                    for y in ((19-(b.y as i32))*30+10)..((19-(b.y as i32))*30+40) {
-                        if x >= 0 && x < WIDTH as i32 && y >= 0 && y < HEIGHT as i32 { buffer[(x+y*(WIDTH as i32)) as usize] = HOLD_COLORS[piece.color as usize]; }
+        if main_menu == false {
+            //hold rendering
+            let mut p: Piece = Piece::new(piece.x, piece.y, piece.color);
+            p.r = piece.r;
+            while p.y>-1 && !p.collide(0, -1, &board) {
+                p.y-=1;
+            }
+            for b in p.getBlocks().iter() {
+                if b.x >= 0 && b.x < 10 && b.y >= 0 && b.y < 40 {
+                    for x in ((b.x as i32)*30+170)..((b.x as i32)*30+200) {
+                        for y in ((19-(b.y as i32))*30+10)..((19-(b.y as i32))*30+40) {
+                            if x >= 0 && x < WIDTH as i32 && y >= 0 && y < HEIGHT as i32 { buffer[(x+y*(WIDTH as i32)) as usize] = HOLD_COLORS[piece.color as usize]; }
+                        }
                     }
                 }
             }
-        }
 
-        //piece rendering
-        for b in piece.getBlocks().iter() {
-            if b.x >= 0 && b.x < 10 && b.y >= 0 && b.y < 40 {
-                for x in ((b.x as i32)*30+170)..((b.x as i32)*30+200) {
-                    for y in ((19-(b.y as i32))*30+10)..((19-(b.y as i32))*30+40) {
-                        if x >= 0 && x < WIDTH as i32 && y >= 0 && y < HEIGHT as i32 { buffer[(x+y*(WIDTH as i32)) as usize] = COLORS[piece.color as usize] }
+            //piece rendering
+            for b in piece.getBlocks().iter() {
+                if b.x >= 0 && b.x < 10 && b.y >= 0 && b.y < 40 {
+                    for x in ((b.x as i32)*30+170)..((b.x as i32)*30+200) {
+                        for y in ((19-(b.y as i32))*30+10)..((19-(b.y as i32))*30+40) {
+                            if x >= 0 && x < WIDTH as i32 && y >= 0 && y < HEIGHT as i32 { buffer[(x+y*(WIDTH as i32)) as usize] = COLORS[piece.color as usize] }
+                        }
                     }
                 }
+            } 
+        } else {
+            //R
+            fill_rect(&mut buffer, 50, 100, 30, 150);
+            fill_rect(&mut buffer, 80, 100, 60, 30);
+            fill_rect(&mut buffer, 110, 130, 30, 60);
+            fill_rect(&mut buffer, 80, 190, 30, 30);
+            fill_rect(&mut buffer, 110, 220, 30, 30);
+
+            //U
+            fill_rect(&mut buffer, 170, 100, 30, 150);
+            fill_rect(&mut buffer, 200, 220, 30, 30);
+            fill_rect(&mut buffer, 230, 100, 30, 150);
+
+            //S
+            fill_rect(&mut buffer, 290, 100, 90, 30);
+            fill_rect(&mut buffer, 290, 160, 90, 30);
+            fill_rect(&mut buffer, 290, 220, 90, 30);
+            fill_rect(&mut buffer, 290, 130, 30, 30);
+            fill_rect(&mut buffer, 350, 190, 30, 30);
+
+            //T
+            fill_rect(&mut buffer, 410, 100, 90, 30);
+            fill_rect(&mut buffer, 440, 130, 30, 120);
+
+            //R
+            fill_rect(&mut buffer, 50+60, 100+180, 30, 150);
+            fill_rect(&mut buffer, 80+60, 100+180, 60, 30);
+            fill_rect(&mut buffer, 110+60, 130+180, 30, 60);
+            fill_rect(&mut buffer, 80+60, 190+180, 30, 30);
+            fill_rect(&mut buffer, 110+60, 220+180, 30, 30);
+
+            //I
+            fill_rect(&mut buffer, 170+60, 100+180, 90, 30);
+            fill_rect(&mut buffer, 200+60, 130+180, 30, 90);
+            fill_rect(&mut buffer, 170+60, 220+180, 90, 30);
+
+            //S
+            fill_rect(&mut buffer, 290+60, 100+180, 90, 30);
+            fill_rect(&mut buffer, 290+60, 160+180, 90, 30);
+            fill_rect(&mut buffer, 290+60, 220+180, 90, 30);
+            fill_rect(&mut buffer, 290+60, 130+180, 30, 30);
+            fill_rect(&mut buffer, 350+60, 190+180, 30, 30);
+
+            if score != 0 {
+                fill_num(&mut buffer, score);
             }
-        } 
+        }
 
         // We unwrap here as we want this code to exit if it fails. Real applications may want to handle this in a different way
         window
@@ -721,6 +780,101 @@ fn placed_piece(brd: &mut Vec<u32>, level: i32, prevX: i32, prevY: i32, prevRot:
         score: score,
         lines: line_clears,
         name: name
+    }
+}
+
+fn fill_rect(buffer: &mut Vec<u32>, b_x: i32, b_y: i32, b_w: i32, b_h: i32) {
+    for x in b_x..(b_x+b_w) {
+        for y in b_y..(b_y+b_h) {
+            if x >= 0 && x < WIDTH as i32 && y >= 0 && y < HEIGHT as i32 { buffer[(x+y*(WIDTH as i32)) as usize] = 0xffffff; }
+        }
+    }
+}
+
+fn fill_num(buffer: &mut Vec<u32>, num: i32) {
+    let digits: Vec<_> = num.to_string().chars().map(|d| d.to_digit(10).unwrap()).collect();
+    //println!("{:?}", digits);
+    let mut i = 0;
+    for digit in digits.iter() {
+        let offset = i*75+590-(digits.len() as i32)*75;
+        match digit {
+            0 => {
+                fill_rect(buffer, 15+offset, 490, 30, 15);
+                fill_rect(buffer, offset, 490+15, 15, 45);
+                fill_rect(buffer, 45+offset, 490+15, 15, 45);
+                fill_rect(buffer, 15+offset, 490+60, 30, 15);
+            },
+            1 => {
+                fill_rect(buffer, 30+offset, 490, 15, 15);
+                fill_rect(buffer, 15+offset, 490+15, 15, 15);
+                fill_rect(buffer, 30+offset, 490+15, 15, 45);
+                fill_rect(buffer, 15+offset, 490+60, 45, 15);
+            },
+            2 => {
+                fill_rect(buffer, 15+offset, 490, 30, 15);
+                fill_rect(buffer, offset, 490+15, 15, 15);
+                fill_rect(buffer, 45+offset, 490+15, 15, 15);
+                fill_rect(buffer, 30+offset, 490+30, 15, 15);
+                fill_rect(buffer, 15+offset, 490+45, 15, 15);
+                fill_rect(buffer, offset, 490+60, 60, 15);
+            },
+            3 => {
+                fill_rect(buffer, 15+offset, 490, 30, 15);
+                fill_rect(buffer, offset, 490+15, 15, 15);
+                fill_rect(buffer, 45+offset, 490+15, 15, 15);
+                fill_rect(buffer, 30+offset, 490+30, 15, 15);
+                fill_rect(buffer, offset, 490+45, 15, 15);
+                fill_rect(buffer, 45+offset, 490+45, 15, 15);
+                fill_rect(buffer, 15+offset, 490+60, 30, 15);
+            },
+            4 => {
+                fill_rect(buffer, 30+offset, 490, 15, 15);
+                fill_rect(buffer, 15+offset, 490+15, 15, 15);
+                fill_rect(buffer, offset, 490+30, 15, 15);
+                fill_rect(buffer, 30+offset, 490+15, 15, 60);
+                fill_rect(buffer, offset, 490+45, 60, 15);
+            },
+            5 => {
+                fill_rect(buffer, offset, 490, 60, 15);
+                fill_rect(buffer, offset, 490+15, 15, 15);
+                fill_rect(buffer, offset, 490+30, 45, 15);
+                fill_rect(buffer, 45+offset, 490+45, 15, 15);
+                fill_rect(buffer, offset, 490+60, 45, 15);
+            },
+            6 => {
+                fill_rect(buffer, 15+offset, 490, 30, 15);
+                fill_rect(buffer, offset, 490+15, 15, 15);
+                fill_rect(buffer, offset, 490+30, 45, 15);
+                fill_rect(buffer, offset, 490+45, 15, 15);
+                fill_rect(buffer, 45+offset, 490+45, 15, 15);
+                fill_rect(buffer, 15+offset, 490+60, 30, 15);
+            },
+            7 => {
+                fill_rect(buffer, offset, 490, 60, 15);
+                fill_rect(buffer, 45+offset, 490+15, 15, 15);
+                fill_rect(buffer, 30+offset, 490+30, 15, 15);
+                fill_rect(buffer, 15+offset, 490+45, 15, 15);
+                fill_rect(buffer, offset, 490+60, 15, 15);
+            },
+            8 => {
+                fill_rect(buffer, 15+offset, 490, 30, 15);
+                fill_rect(buffer, offset, 490+15, 15, 15);
+                fill_rect(buffer, 45+offset, 490+15, 15, 15);
+                fill_rect(buffer, 15+offset, 490+30, 30, 15);
+                fill_rect(buffer, offset, 490+45, 15, 15);
+                fill_rect(buffer, 45+offset, 490+45, 15, 15);
+                fill_rect(buffer, 15+offset, 490+60, 30, 15);
+            },
+            9 => {
+                fill_rect(buffer, 15+offset, 490, 30, 15);
+                fill_rect(buffer, offset, 490+15, 15, 15);
+                fill_rect(buffer, 45+offset, 490+15, 15, 45);
+                fill_rect(buffer, 15+offset, 490+30, 30, 15);
+                fill_rect(buffer, 15+offset, 490+60, 30, 15);
+            },
+            _ => {}
+        }
+        i += 1;
     }
 }
 
