@@ -276,17 +276,15 @@ fn main() {
         }
 
         if binding < binds {
-            window.get_keys_pressed(KeyRepeat::No).map(|keys| {
-                for t in keys {
-                    println!("bound to {:?}", t);
-                    key_binds[binding] = t;
-                    binding = binds;
-                    let mut file_contents:Vec<u8> = Vec::new();
-                    for i in 0..binds {
-                        file_contents.push(key_binds[i] as u8);
-                    }
-                    std::fs::write("settings.dat", file_contents).unwrap();
+            window.get_keys_pressed(KeyRepeat::No).iter().for_each(|t| {
+                println!("bound to {:?}", t);
+                key_binds[binding] = *t;
+                binding = binds;
+                let mut file_contents:Vec<u8> = Vec::new();
+                for i in 0..binds {
+                    file_contents.push(key_binds[i] as u8);
                 }
+                std::fs::write("settings.dat", file_contents).unwrap();
             });
         }
 

@@ -9,8 +9,8 @@ edition = "2018"
 
 [dependencies]
 # coffee = { version = "0.4.1", features = ["opengl"] }
-minifb = "0.19.3"
-rand = "0.8"
+minifb = "0.23"
+rand = "0.8.5"
 
 [profile.dev]
 opt-level = 2
